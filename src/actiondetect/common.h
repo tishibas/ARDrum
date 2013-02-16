@@ -1,9 +1,11 @@
 #define _USE_MATH_DEFINES
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <conio.h>
 #include <math.h>
+#include <Windows.h>
 #include <vector>
 
 #include "opencv2\opencv.hpp"

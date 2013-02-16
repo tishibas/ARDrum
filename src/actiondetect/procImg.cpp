@@ -1,21 +1,23 @@
 #include "common.h"
 #include "procImg.h"
 
-void Detector::detectAction( vector<Vec2> &act ){
+void Detector::detectAction( vector<iVec2> &act ){
 	// 各種閾値
-	const int diffThresh = 10;
-	const int detectThresh = 5;
+	const int diffThresh = 5;
+	const int detectThresh = 2;
 	const int actionThresh = 20;
 	const int actionLimit = 5;
 
 	// 画像配列のポインタを移行
 	int step = srcRGB->step;
-	unsigned char *pSrcRGB = srcRGB->data;
-	unsigned char *pSrcGray = srcGray.data;
-	unsigned char *pPreGray = preGray.data;
-	unsigned char *pDstRed = dstRed.data;
-	unsigned char *pDstBlue = dstBlue.data;
+	unsigned char *pSrcRGB   = srcRGB->data;
+	unsigned char *pSrcGray  = srcGray.data;
+	unsigned char *pPreGray  = preGray.data;
 	unsigned char *pDiffMask = diffMask.data;
+
+	unsigned char *pDstCol[2];
+	pDstCol[0] = dstCol[0].data;
+	pDstCol[1] = dstCol[1].data;
 
 	//動き残差計算
 	for( int v = 0; v < h; v++ ){
@@ -25,139 +27,150 @@ void Detector::detectAction( vector<Vec2> &act ){
 			pDiffMask[grayOffset] = (unsigned char)( abs(val) );
 		}
 	}
+	cv::threshold( diffMask, diffMask, diffThresh, 255, CV_THRESH_BINARY );
+	cv::erode(diffMask, diffMask, Mat(), Point(-1, -1));
 
+	int dstMaxVal[2] = {0};
 	//閾値以上の動き領域で、所定成分の色を取得
 	for( int v = 0; v < h; v++ ){
-		histRedH[v] = 0;
+		histH[0][v] = 0;
+		histH[1][v] = 0;
 		for( int u = 0; u < w; u++ ){
-			int rgbOffset = step*v + 3*u;
+			int rgbOffset  = step*v + 3*u;
 			int grayOffset = w*v + u;
 
 			unsigned char r =  pSrcRGB[rgbOffset + 2];
 			unsigned char g =  pSrcRGB[rgbOffset + 1];
 			unsigned char b =  pSrcRGB[rgbOffset + 0];
 
-			int dstRed  = r - (g + b)/2 - abs( g - b ); // max 2*256 赤検出
-			int dstBlue = b - (g + r)/2 - abs( g - r ); // max 2*256 赤検出
+			int dstCol[2];
+			dstCol[0] = r - MAX(g,b) - 5 * abs(g - b); // max 2*256 赤検出
+			dstCol[1] = b - MAX(g,r) - abs(g - r); // max 2*256 青検出
 
-			if( dstRed  < 0 ) dstRed  = 0;
-			if( dstBlue < 0 ) dstBlue = 0;
-
-			if( pDiffMask[grayOffset] < diffThresh ){
-				dstRed = 0;
+			for( int i = 0; i < 2; i++ ){
+				if( dstCol[i] < 0 ) dstCol[i] = 0;
+				if( pDiffMask[grayOffset] == 0 ) dstCol[i] = 0;
+				histH[i][v] += dstCol[i];
+				pDstCol[i][grayOffset] = dstCol[i];
+				if( dstCol[i] > dstMaxVal[i] ) dstMaxVal[i] = dstCol[i];
 			}
-			histRedH[v] += dstRed;
-			histBlueH[v] += dstBlue;
-
-			pDstRed [grayOffset] = (unsigned char)(dstRed);
-			pDstBlue[grayOffset] = (unsigned char)(dstBlue);
 		}
 	}
+	//equalizeHist( dstRed, dstRed );
 
 	act.clear();
 	{// 検出
 		//検出判定
-		bool detectFlagRed = true;
+		bool detectFlag[2];
+		detectFlag[0] = true;
+		detectFlag[1] = true;
 
 		//検出位置
-		Vec2 posRed;
+		iVec2 pos[2];
 
 		{// y探索
-			int maxValRed =  0, maxValBlue = 0;
-			int maxPosRed = -1, maxPosBlue = -1;
-			int meanRed = 0, meanBlue = 0;
-			for( int v = kernelSize; v < h - kernelSize; v++ ){
-				int valRed = 0, valBlue = 0;
-				for( int i = v - kernelSize; i < v + kernelSize; i++ ){
-					valRed  += (int)(kernel[abs(v - i)] * histRedH [v] + 0.5);
-					valBlue += (int)(kernel[abs(v - i)] * histBlueH[v] + 0.5);
+			int maxVal[2] = {0};
+			int maxPos[2] = {0};
+			int mean[2] = {0};
+
+			for( int i = 0; i < 2; i++ ){
+				for( int v = kernelSize; v < h - kernelSize; v++ ){
+					int val = 0;
+					for( int j = v - kernelSize; j < v + kernelSize; j++ ){
+						int k = abs(j - v);
+						val += (int)(kernel[k] * histH[i][j] * (255.0/dstMaxVal[i] ) + 0.5);
+					}
+
+					if( val > maxVal[i] ){
+						maxPos[i] = v;
+						maxVal[i] = val;
+					}
+					mean[i] += val;
+					//printf("%d\t %d\n", int( histH[i][v] * (255.0/dstMaxVal[i] )), val);
 				}
-				if( valRed > maxValRed ){
-					maxPosRed = v;
-					maxValRed =valRed;
-				}
-				if( valBlue > maxValBlue ){
-					maxPosBlue = v;
-					maxValBlue =valBlue;
+				pos[i].y = maxPos[i];
+
+				mean[i] = mean[i] / (h - 2*kernelSize);
+				if( maxVal[i] < detectThresh*mean[i] ){
+					detectFlag[i] = false;
+
 				}
 
-				meanRed  += valRed;
-				meanBlue += valBlue;
-			}
-			posRed.y = maxPosRed;
-
-			meanRed = meanRed / (h - 2*kernelSize);
-			if( maxValRed < detectThresh * meanRed ){
-				detectFlagRed = false;
 			}
 		}
 
 		{// x探索
-			int maxVal =  0;
-			int maxPos = -1;
-			int mean = 0;
-			for( int u = 0; u < w; u++ ){
-				int v = posRed.y - kernelSize;
-				int greyOffset = w*v + u;
-				histRedW[u] = pDstRed[greyOffset];
-			}
-			for( int v = posRed.y - kernelSize + 1; v < posRed.y + kernelSize; v++ ){
-				for( int u = 0; u < w; u++ ){
-					int greyOffset = w*v + u;
-					histRedW[u] += pDstRed[greyOffset];
-				}
-			}
-			for( int u = kernelSize; u < w - kernelSize; u++ ){
-				int val = 0;
-				for( int i = u - kernelSize; i < u + kernelSize; i++ ){
-					val += (int)(kernel[abs(u - i)] * histRedW[u] + 0.5);
-				}
-				if( val > maxVal ){
-					maxPos = u;
-					maxVal =val;
-				}
-			}
-			posRed.x = maxPos;
+			int maxVal[2] = {0};
+			int maxPos[2] = {0};
+			int mean[2] = {0};
 
+			for( int i = 0; i < 2; i++ ){
+				memset(histW[i], 0, sizeof(int) * w );
+				for( int v = pos[i].y - kernelSize; v < pos[i].y + kernelSize; v++ ){
+					for( int u = 0; u < w; u++ ){
+						int greyOffset = w*v + u;
+						histW[i][u] += pDstCol[i][greyOffset];;
+					}
+				}
+				for( int u = kernelSize; u < w - kernelSize; u++ ){
+					int val = 0;
+					for( int j = u - kernelSize; j < u + kernelSize; j++ ){
+						val += (int)(kernel[abs(j - u)] * histW[i][j] * (255.0/dstMaxVal[i] ) + 0.5);
+					}
+					if( val >= maxVal[i] ){
+						maxPos[i] = u;
+						maxVal[i] = val;
+					}
+				}
+				pos[i].x = maxPos[i];
+			}
 		}
 
 		// fordebbug
 		//if( detectFlag ){
-		//	line( *srcRGB, Point(x-20, y) , Point(x+20, y), Scalar(0, 0, 255), 4, CV_AA );
+		//	line( *srcRGB, Point(pos[0].x-20, pos[0].y) , Point(pos[0].x+20, pos[0].y), Scalar(0, 0, 255), 4, CV_AA );
 		//}
 
-		posBuffRed[lastPosRed].pos = posRed;
-		posBuffRed[lastPosRed].detect = detectFlagRed;
 
-		bool action = true;
-		{// 赤検出
-			PosBuff buff1 = posBuffRed[(lastPosRed + 3 - 2) % 3];
-			PosBuff buff2 = posBuffRed[(lastPosRed + 3 - 1) % 3];
-			PosBuff buff3 = posBuffRed[(lastPosRed + 3 - 0) % 3];
+		{
+			for( int i = 0; i < 2; i++ ){
+				posBuff[i][lastPos[i]].pos = pos[i];
+				posBuff[i][lastPos[i]].detect = detectFlag[i];
 
-			//
-			if( abs(buff1.pos.x - buff2.pos.x) > actionLimit * actionThresh || abs(buff1.pos.y - buff2.pos.y) > actionLimit * actionThresh ){
-				action = false;
-				buff1.detect = false;
+				PosBuff buff1 = posBuff[i][(lastPos[i] + 3 - 2) % 3];
+				PosBuff buff2 = posBuff[i][(lastPos[i] + 3 - 1) % 3];
+				PosBuff buff3 = posBuff[i][(lastPos[i] + 3 - 0) % 3];
+
+				{// 振り上げ検出
+					if( buff1.pos.y - buff2.pos.y < 0 ){
+						detectStart[i] = true;
+					}
+				}
+
+				bool action = true;
+				{// 降り下げ検出
+					//
+					if( abs(buff1.pos.x - buff2.pos.x) > actionLimit * actionThresh || abs(buff1.pos.y - buff2.pos.y) > actionLimit * actionThresh ){
+						action = false;
+						buff1.detect = false;
+					}
+					if( abs(buff2.pos.x - buff3.pos.x) > actionLimit * actionThresh || abs(buff2.pos.y - buff3.pos.y) > actionLimit * actionThresh ){
+						action = false;
+					}
+
+					if( !buff1.detect || !buff2.detect || !buff3.detect ){
+						action = false;
+					}
+					if( buff2.pos.y - buff1.pos.y < actionThresh || buff3.pos.y - buff2.pos.y > buff2.pos.y - buff1.pos.y ){
+						action = false;
+					}
+				}
+				if( detectStart[i] && action ){
+					detectStart[i] = false;
+					act.push_back( pos[i] );
+				}
+				lastPos[i]++;  lastPos[i] = lastPos[i] % 3;
 			}
-			if( abs(buff2.pos.x - buff3.pos.x) > actionLimit * actionThresh || abs(buff2.pos.y - buff3.pos.y) > actionLimit * actionThresh ){
-				action = false;
-			}
-
-			if( !buff1.detect || !buff2.detect || !buff3.detect ){
-				action = false;
-			}
-			if( buff2.pos.y - buff1.pos.y < actionThresh || buff3.pos.y - buff2.pos.y > buff2.pos.y - buff1.pos.y ){
-				action = false;
-			}
-
-
-		}
-		lastPosRed++;
-		lastPosRed = lastPosRed % 3;
-	
-		if( action ){
-			act.push_back( posRed );
 		}
 	}
 

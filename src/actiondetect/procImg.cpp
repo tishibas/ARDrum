@@ -4,9 +4,10 @@
 void Detector::detectAction( vector<iVec2> &act ){
 	// 各種閾値
 	const int diffThresh = 5;
-	const int detectThresh = 2;
+	const int detectThresh = 3;
 	const int actionThresh = 20;
 	const int actionLimit = 5;
+	const int countMax = 10;
 
 	// 画像配列のポインタを移行
 	int step = srcRGB->step;
@@ -165,8 +166,9 @@ void Detector::detectAction( vector<iVec2> &act ){
 						action = false;
 					}
 				}
-				if( detectStart[i] && action ){
-					detectStart[i] = false;
+				detectStart[i]++;
+				if( detectStart[i] >= 0 && action ){
+					detectStart[i] = - countMax;
 					act.push_back( pos[i] );
 				}
 				lastPos[i]++;  lastPos[i] = lastPos[i] % 3;

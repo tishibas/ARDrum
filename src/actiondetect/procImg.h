@@ -17,7 +17,7 @@ class Detector{
 
 	//動きマップの座標軸ヒストグラム 2色
 	int *histH[2], *histW[2];	
-	bool detectStart[2];
+	int detectStart[2];
 
 	int kernelSize; // 密度推定用のカーネルサイズ
 	int *kernel;	// 密度推定用のカーネル(指数関数)
@@ -40,9 +40,11 @@ public:
 		this->w = w, this->h = h;
 
 		// 配列確保
-		srcGray  = Mat(Size(w, h),CV_8UC1);
+		srcGray  = Mat(Size(w, h),CV_8UC1); 
 		preGray  = Mat(Size(w, h),CV_8UC1);
 		diffMask = Mat(Size(w, h),CV_8UC1);
+
+
 		
 		{
 			for( int i = 0; i < 2; i++ ){
@@ -58,10 +60,10 @@ public:
 				histW[i] = new int[w];
 			}
 
-			kernelSize = 10;
+			kernelSize = 20;
 			kernel = new int[kernelSize+1];
 			for(int i = 0 ; i < kernelSize + 1; i++ ){
-				kernel[i] = (int)(20 * exp((double)(-i*0.5)) + 0.5);
+				kernel[i] = (int)(20 * exp((double)(-i*0.2)) + 0.5);
 			}
 		}
 	}

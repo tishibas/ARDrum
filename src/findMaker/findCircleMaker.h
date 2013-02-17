@@ -1,6 +1,6 @@
 #ifndef FIND_CIRCLE_H
 #define FIND_CIRCLE_H
-
+#include "./Labeling.h"
 using namespace cv;
 
 class Vec2{
@@ -84,6 +84,7 @@ public:
     }
 
     // マーカ検出
+    void selectMarkerCand( vector<MarkerCand> &markerCands, vector<Marker> &markers, LabelingBS &labelingBs);
     void selectMarkerCand( vector<MarkerCand> &markerCands, vector<Marker> &markers);
     void getMarker( vector<Marker> &markers );
 };

@@ -9,6 +9,10 @@ int main(){
 	char *wName = "test";
 	namedWindow( wName );
 
+	namedWindow( "debug1" );
+	namedWindow( "debug2" );
+
+
 	//ƒL[“ü—Í—p
 	int toggle = 1;
 	int key = 0;

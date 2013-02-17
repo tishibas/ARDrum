@@ -9,12 +9,14 @@ struct RectImg{
 void Detector::detectAction( vector<iVec2> &act ){
 	// 各種閾値
 	const int diffThresh = 5;
-	const double detectThresh = 1.1;
+	const double detectThresh = 1.2;
 	const int actionThresh = 15;
-	const int actionLimit = 5;
+	const int actionLimit = 8;
 	const int countMax = 5;
 
 	const int Margin = 50;
+
+	const int colNum = 2;
 
 	// 画像配列のポインタを移行
 	int step = srcRGB->step;
@@ -56,10 +58,10 @@ void Detector::detectAction( vector<iVec2> &act ){
 
 			int dstCol[2];
 			//dstCol[0] = r - MAX(g,b) - 5 * abs(g - b); // max 2*256 赤検出
-			dstCol[0] = g - MAX(r,b);// - 1 * abs(r - b); // max 2*256 赤検出
-			dstCol[1] = b - MAX(g,r);// - 1 * abs(g - r); // max 2*256 青検出
+			dstCol[0] = (r + g)/2 - b - 0.5 * abs(r - g);  // max 2*256 赤検出
+			dstCol[1] = b - MAX(g,r) - 0.5 * abs(g - r);// max 2*256 青検出
 
-			for( int i = 0; i < 2; i++ ){
+			for( int i = 0; i < colNum; i++ ){
 				if( dstCol[i] < 0 ) dstCol[i] = 0;
 				if( pDiffMask[grayOffset] == 0 ) dstCol[i] = 0;
 				if( dstCol[i] > dstMaxVal[i] ) dstMaxVal[i] = dstCol[i];
@@ -73,7 +75,7 @@ void Detector::detectAction( vector<iVec2> &act ){
 		}
 	}
 
-	for(int i = 0; i < 2; i++ ){
+	for(int i = 0; i < colNum; i++ ){
 		if( valMax[i] > dstMaxVal[i] )	valMax[i] = dstMaxVal[i];
 	}
 	//equalizeHist( dstRed, dstRed );
@@ -94,7 +96,7 @@ void Detector::detectAction( vector<iVec2> &act ){
 			int mean[2] = {0};
 			int max = 0;
 			int meanCount = 1;
-			for( int i = 0; i < 2; i++ ){
+			for( int i = 0; i < colNum; i++ ){
 				for( int v = kernelSize; v < h - kernelSize; v++ ){
 					int val = 0;
 					for( int j = v - kernelSize; j < v + kernelSize; j++ ){
@@ -103,9 +105,9 @@ void Detector::detectAction( vector<iVec2> &act ){
 					}
 
 					val /= kernelSum;
-					//if( val < 0.5 * valMax[i] ){
-					//	val = 0;
-					//}
+					if( val < 10){
+						val = 0;
+					}
 
 					if( val > max ){
 						max = val;
@@ -156,7 +158,7 @@ void Detector::detectAction( vector<iVec2> &act ){
 			int maxPos[2] = {0};
 			int mean[2] = {0};
 
-			for( int i = 0; i < 2; i++ ){
+			for( int i = 0; i < colNum; i++ ){
 				memset(histW[i], 0, sizeof(int) * w );
 				for( int v = pos[i].y - kernelSize; v < pos[i].y + kernelSize; v++ ){
 					for( int u = 0; u < w; u++ ){
@@ -186,7 +188,7 @@ void Detector::detectAction( vector<iVec2> &act ){
 
 
 		{
-			for( int i = 0; i < 2; i++ ){
+			for( int i = 0; i < colNum; i++ ){
 				posBuff[i][lastPos[i]].pos = pos[i];
 				posBuff[i][lastPos[i]].detect = detectFlag[i];
 

@@ -47,7 +47,8 @@ struct Model{
 	}
 };
 
-Model drumModel, cymbalModel;	// MQOモデル
+int actFlg[6];
+Model drumL2Model, drumL1Model, drumR1Model, drumR2Model, cymbalLModel, cymbalRModel, drumActModel, cymbalActModel;	// MQOモデル
 
 //CV
 CvCapture *capture=NULL;
@@ -59,7 +60,7 @@ void Draw(void);
 void Reshape (int w, int h);
 void Keyboard(unsigned char key, int x, int y);
 void Quit(void);
-void renderModel(Model &model, float x, float y, float z, float a);
+void renderModel(Model &model, Model &actModel, float x, float y, float z, float a, int actFlg);
 
 // 光源の設定を行う関数
 void mySetLight(void)
@@ -98,37 +99,42 @@ void Draw(void)
 	// OpenCV の画像データを描画（キャプチャした画像を背景として描画）
 	glDrawPixels( copyImage->width, copyImage->height, GL_RGBA, GL_UNSIGNED_BYTE, copyImage->imageData );
 	glClear( GL_DEPTH_BUFFER_BIT ); // デプスバッファのみをクリア
-
-
+	
 	{
 		// detect marker
 
 		// detect action
-
-
-
+			// vector<int> act;
+			// int num = act.size();
+			// int id1 = act[0]; // たたかれたモデルのID
 
 
 		// out sound
 
-
-
-
+		
 	}
 
-
 	{// renderModel
-		//if(aciont)
-		{
-			//g_mqoModel.state = 20;
 
-		}
-		renderModel( drumModel,   -160, -100, -400, 10 );
-		renderModel( drumModel,    -80, -100, -400, 10 );
-		renderModel( drumModel,     80, -100, -400, 10 );
-		renderModel( drumModel,    160, -100, -400, 10 );
-		renderModel( cymbalModel, -200,    0, -400, 10 );
-		renderModel( cymbalModel,  200,    0, -400, 10 );
+		// モデルの表示位置{ x, y, z, a }
+		// 決め打ちで書いてるが実際はこの座標と角度をマーカーで取得したものにする！
+		float sym_l[]   = {-200,    0, -500, 10};
+		float drum_l2[] = {-150, -100, -450, 10};
+		float drum_l1[] = { -50, -100, -400, 10};
+		float drum_r1[] = {  50, -100, -400, 10};
+		float drum_r2[] = { 150, -100, -450, 10};
+		float sym_r[]   = { 200,    0, -500, 10};
+
+		// 叩かれたモデルのactFlgを1にして渡す（複数指定可）
+		renderModel( cymbalLModel, cymbalActModel, sym_l[0],   sym_l[1],   sym_l[2],   sym_l[3], actFlg[0] );
+		renderModel( drumL2Model,  drumActModel, drum_l2[0], drum_l2[1], drum_l2[2], drum_l2[3], actFlg[1] );
+		renderModel( drumL1Model,  drumActModel, drum_l1[0], drum_l1[1], drum_l1[2], drum_l1[3], actFlg[2] );
+		renderModel( drumR1Model,  drumActModel, drum_r1[0], drum_r1[1], drum_r1[2], drum_r1[3], actFlg[3] );
+		renderModel( drumR2Model,  drumActModel, drum_r2[0], drum_r2[1], drum_r2[2], drum_r2[3], actFlg[4] );
+		renderModel( cymbalRModel, cymbalActModel, sym_r[0],   sym_r[1],   sym_r[2],   sym_r[3], actFlg[5] );
+	
+		for(int i=0;i<6; i++) actFlg[i] = 0;
+
 	}
 
 	glutSwapBuffers();
@@ -150,9 +156,16 @@ int main(int argc, char *argv[])
 	glutCreateWindow("MQO Loader for OpenGL");					// ウィンドウの生成
 
 	// モデルを表示させる準備
-	mqoInit();											// GLMetaseqの初期化
-	drumModel.mqo = mqoCreateModel("drum.mqo",1.0);		// モデルのロード
-	cymbalModel.mqo = mqoCreateModel("cymbal.mqo",1.0);		// モデルのロード
+	mqoInit();						// GLMetaseqの初期化
+	// モデルのロード
+	drumL2Model.mqo = mqoCreateModel("drum.mqo",1.0);
+	drumL1Model.mqo = mqoCreateModel("drum.mqo",1.0);
+	drumR1Model.mqo = mqoCreateModel("drum.mqo",1.0);
+	drumR2Model.mqo = mqoCreateModel("drum.mqo",1.0);
+	drumActModel.mqo = mqoCreateModel("drumAct.mqo",1.0);
+	cymbalLModel.mqo = mqoCreateModel("cymbal.mqo",1.0);
+	cymbalRModel.mqo = mqoCreateModel("cymbal.mqo",1.0);	
+	cymbalActModel.mqo = mqoCreateModel("cymbalAct.mqo",1.0);	
 
 	// 終了処理関数の設定
 	atexit(Quit);
@@ -171,11 +184,6 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-
-
-
-
-
 
 
 // ウィンドウ変形時に呼ばれる関数
@@ -199,10 +207,16 @@ void Reshape (int w, int h)
 void Keyboard(unsigned char key, int x, int y)
 {
 	switch (key) {
-		case 'q':
+		case 'a': actFlg[0]=1; break;
+		case 's': actFlg[1]=1; break;
+		case 'd': actFlg[2]=1; break;
+		case 'f': actFlg[3]=1; break;
+		case 'g': actFlg[4]=1; break;
+		case 'h': actFlg[5]=1; break;
+		case 'q': actFlg[2]=1; actFlg[5]=1; break;
 		case 'Q':
 		case 0x1b:
-			exit(0);	// （このあと終了処理関数が呼ばれる）
+			Quit();	// （このあと終了処理関数が呼ばれる）
 		default:
 			break;
 	}
@@ -212,7 +226,16 @@ void Keyboard(unsigned char key, int x, int y)
 // 終了処理関数
 void Quit(void)
 {
-	mqoDeleteModel( drumModel.mqo );	// モデルの削除
-	mqoDeleteModel( cymbalModel.mqo );	// モデルの削除
-	mqoCleanup();					// GLMetaseqの終了処理
+	// モデルの削除
+	mqoDeleteModel( drumL2Model.mqo );
+	mqoDeleteModel( drumL1Model.mqo );	
+	mqoDeleteModel( drumR1Model.mqo );	
+	mqoDeleteModel( drumR2Model.mqo );	
+	mqoDeleteModel( drumActModel.mqo );	
+	mqoDeleteModel( cymbalLModel.mqo );
+	mqoDeleteModel( cymbalRModel.mqo );
+	mqoDeleteModel( cymbalActModel.mqo );
+
+	// GLMetaseqの終了処理
+	mqoCleanup();					
 }

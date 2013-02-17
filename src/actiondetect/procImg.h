@@ -21,6 +21,7 @@ class Detector{
 
 	int kernelSize; // 密度推定用のカーネルサイズ
 	int *kernel;	// 密度推定用のカーネル(指数関数)
+	int kernelSum;
 
 	// 検出したスティックの情報
 	struct PosBuff{
@@ -31,10 +32,14 @@ class Detector{
 	PosBuff posBuff[2][3];
 	int lastPos[2];
 
+	int valMax[2];
+
 public:
 	// デバッグ用に一時 public
 	Mat diffMask;	//輝度動きマップ
 	Mat dstCol[2];	//　色動きマップ
+
+	Mat debug1, debug2;
 
 	Detector( int w, int h, float f ){
 		this->w = w, this->h = h;
@@ -44,6 +49,8 @@ public:
 		preGray  = Mat(Size(w, h),CV_8UC1);
 		diffMask = Mat(Size(w, h),CV_8UC1);
 
+		debug1 = Mat(Size(256, h),CV_8UC1);
+		debug2 = Mat(Size(w, 256),CV_8UC1);
 
 		
 		{
@@ -52,6 +59,8 @@ public:
 				dstCol[i] = Mat(Size(w, h), CV_8UC1);
 				lastPos[i] = 0;
 				memset( &posBuff[i], 0, 3 * sizeof(PosBuff) );
+
+				valMax[i] = 0;
 			}
 		}
 		{// 密度推定用
@@ -60,10 +69,12 @@ public:
 				histW[i] = new int[w];
 			}
 
-			kernelSize = 20;
+			kernelSize = 10;
+			kernelSum = -20;
 			kernel = new int[kernelSize+1];
 			for(int i = 0 ; i < kernelSize + 1; i++ ){
 				kernel[i] = (int)(20 * exp((double)(-i*0.2)) + 0.5);
+				kernelSum += 2*kernel[i];
 			}
 		}
 	}

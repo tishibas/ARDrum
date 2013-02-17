@@ -10,11 +10,6 @@
 
 using namespace std;
 using namespace cv;
-cv::RNG rnd(1192);
-cv::Scalar randomColor()
-{
-    return cv::Scalar(rnd.next() & 0xFF, rnd.next() & 0xFF, rnd.next() & 0xFF);
-}
 
 int main( int argc, const char** argv ){
     VideoCapture cap(0);
@@ -35,21 +30,8 @@ int main( int argc, const char** argv ){
         cap >> frame;
         findCircle.init( frame );         // データ入力
 
-        vector<Vec2> act;
-        findCircle.Marker( act );   // 円認識
-
-        {// 描画
-            for( int i = 0; i < act.size(); i++ ){
-                int x = act[i].x, y = act[i].y;
-                line( frame, Point(x-15, y) , Point(x+15, y), Scalar(255, 255, 0), 4, CV_AA );
-                line( frame, Point(x, y-15) , Point(x, y+15), Scalar(255, 255, 0), 4, CV_AA );
-                circle( frame, Point(x, y), 20, Scalar(0, 255, 255), 2 );
-            }
-        }
-
-        Mat *show = toggle ? &frame : &findCircle.dstRed;
-        imshow( wName, *show );
-
+        vector<Marker> markers;
+        findCircle.getMarker( markers );   // 円認識
         key = waitKey(1);
         switch( key ){
             case 't' :{ toggle ^= 1; break;} 
@@ -59,52 +41,82 @@ int main( int argc, const char** argv ){
     return 0;	
 }
 
-void FindCircle::Marker( vector<Vec2> &act ){
+void FindCircle::selectMarkerCand( vector<MarkerCand> &markerCands, vector<Marker> &markers){
+    for( vector<MarkerCand>::iterator it1 = markerCands.begin(); it1 != markerCands.end(); it1++){
+            bool markFlug = true;
+        for( vector<MarkerCand>::iterator it2 = markerCands.begin(); it2 != markerCands.end(); it2++){
+            if(it1 == it2)
+                continue;
+            // 中心
+            if( it1->minNode.x < it2->center.x && it2->center.x < it1->maxNode.x 
+                 && it1->minNode.y < it2->center.y && it2->center.y < it1->maxNode.y){
+                markFlug = false;
+                cout << "label in labels" << endl; 
+                continue;
+            }
+        }
+        
+        if(markFlug){
+            Marker mark;
+            mark.setCenter(it1->center);
+            mark.calcAngle(it1->size_x, it1->size_y);
+            cout << "center: " << mark.center.x << "," << mark.center.y << ","  << mark.center.z << endl;
+            cout << "size x:" << mark.size_x << "size_y :" << mark.size_y << endl;  
+            cout << "angle:" << mark.angle << endl;
+            markers.push_back(mark);
+        } 
+    }
+};
+
+void FindCircle::getMarker( vector<Marker> &markers ){
     
-    //輪郭保存用のストレージを確保
-	CvMemStorage *storage = cvCreateMemStorage (0);//輪郭用
-	CvMemStorage *storagepoly = cvCreateMemStorage (0);//輪郭近似ポリゴン用
-	
-    threshold (srcGray, srcBW, 125, 255, CV_THRESH_BINARY_INV );//マーカーが浮き出る
- //   imshow("bin", srcBW);
+    threshold (srcGray, srcBW, 62, 255, CV_THRESH_BINARY_INV );//マーカーが浮き出る
+    imshow("bin", srcBW);
     Mat label(srcRGB->size(), CV_16SC1);
     LabelingBS labeling;
     labeling.Exec(srcBW.data, (short *)label.data, srcRGB->cols, srcRGB->rows, false, 0);
 
     // ラベリング結果を出力する、真っ白な状態で初期化
-    Mat outimg(srcRGB->size(), CV_8UC3, Scalar(255, 255, 255));
+    vector<MarkerCand> markerCands;
     // ラベルされた領域をひとつずつ描画
     for( int i = 0; i < labeling.GetNumOfRegions(); i++)
     {
+        MarkerCand cand;
         RegionInfoBS* lb =  labeling.GetResultRegionInfo(i);
+        // 中心
+        float cx, cy;;
+        lb->GetCenter(cx, cy);
+        Vec2 center;
+        center.set(cx, cy);
+        // サイズ
         int size_x, size_y;
         lb->GetSize( size_x, size_y );
-        cout << "size: " << size_x << "," << size_y << endl;
-/*       
-領域中央の座標(!=重心) を返す
-void GetCenter( float& x, float& y )
-領域のサイズを返す
-void GetSize( int& x, int& y )
-領域の左上座標を返す
-void GetMin( int& x, int& y )
-領域の右下座標を返す
-void GetMax( int& x, int& y )
-領域の重心を返す
-void GetCenterOfGravity( float& x, float& y )
-領域の入力バッファにおける値を返す
-SrcT GetSourceValue( void )
-領域の連続領域番号を返す
-DstT GetResult( void )
-*/
-        // ラベリング結果でイロイロする。
-        // ラベリング結果の領域を抽出する。
-        if(size_x < 100){
-            Mat labelarea;
-            compare(label, i + 1, labelarea, CV_CMP_EQ);
-            // 抽出した領域にランダムな色を設定して出力画像に追加。
-            Mat color(srcRGB->size(), CV_8UC3, randomColor());
-            color.copyTo(outimg, labelarea);
-        }
+        // 面積
+        int size = size_x * size_y;
+        // ピクセル数  
+        int pix = lb->GetNumOfPixels();
+        Vec2 minNode, maxNode;
+        lb->GetMin(cand.minNode.x, cand.minNode.y);
+        lb->GetMax(cand.maxNode.x, cand.maxNode.y);
+
+        // あまりにも大きいのはマーカーではない
+        if(size_x > ( (float)w/2.0))
+             continue;
+        // あまりにも小さいのはマーカーではない(x方向のみ)
+        if (size_x < ( (float)w/10.0))
+            continue;
+        // 中が塗りつぶされていないもの
+        if ( 3.0 * pix > size )
+            continue;
+        
+        // マーカー候補
+        cand.setCenter(center);
+        cand.calcAngle(size_x, size_y);
+        markerCands.push_back(cand);
     }
-    imshow("label", outimg);
+    selectMarkerCand(markerCands, markers);
+    for(int i=0; i < markers.size(); i++){
+        ellipse( *srcRGB, Point(markers[i].center.x, markers[i].center.y), Size(markers[i].size_x, markers[i].size_y), 0, 0, 360, Scalar(0,0,200), 3, 4);
+    }
+    imshow("label", *srcRGB);
 };

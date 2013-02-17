@@ -2,14 +2,16 @@
 #include "procImg.h"
 
 int main(){
-
-	Drum * drum = new Drum();
 	
 	VideoCapture cap(2);
 	if(!cap.isOpened()) return -1;
 
 	char *wName = "test";
 	namedWindow( wName );
+
+	namedWindow( "debug1" );
+	namedWindow( "debug2" );
+
 
 	//キー入力用
 	int toggle = 1;
@@ -55,11 +57,7 @@ int main(){
 
 		// スティック検出
 		vector<iVec2> act;
-		detector.detectAction( act );
-
-		if(act.size() > 0) {
-			drum->tataku(SCRATCH_PUSH);
-		}
+		detector.detectAction( act );	
 
 		Mat *show = toggle ? &frame : &detector.dstCol[0];
 		{// 検出結果描画

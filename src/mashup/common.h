@@ -9,7 +9,7 @@
 #include <time.h>
 #include <sys/types.h>
 #include <WinDef.h>
-#include "Drum.h"
+//#include "Drum.h"
 
 
 #include <opencv2/opencv.hpp>
